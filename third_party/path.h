@@ -399,4 +399,15 @@ remove_all(const path &path)
     }
 }
 
+inline path current_path()
+{
+#ifdef _WIN32
+    #define getcwd _getcwd
+#endif
+
+    char buf[FILENAME_MAX];
+    BOB_ASSERT(getcwd(buf, sizeof(buf)) != nullptr);
+    return buf;
+}
+
 }   // namespace filesystem
