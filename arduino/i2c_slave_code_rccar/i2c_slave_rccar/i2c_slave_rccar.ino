@@ -38,10 +38,13 @@ void setup() {
 
     Serial.begin(9600);
 
-    // starts i2c connection
+    // Starts i2c connection
     Wire.begin(SLAVE_ADDRESS);
 
-    // callback for sending speed and steering wheel angle values with i2c
+    // Callback for master request
+    Wire.onReceive(receiveEvent);
+
+    // Callback for sending speed and steering wheel angle values with i2c
     Wire.onRequest(sendEvent);
 }
 
@@ -93,6 +96,25 @@ bool checkRemote() {
         return true;
     }
     return false;
+
+}
+
+
+// called when data is sent through i2c to arduino
+// to update the motor values
+void receiveEvent(int bytes) {
+    // check incoming bytes from master
+    uint8_t read_array[bytes];
+    int read_byte = 0; // number of bytes read
+    for(read_byte = 0; Wire.available() && read_byte < bytes; read_byte++) {
+        read_array[read_byte] = Wire.read();
+    }
+
+    if (read_byte==bytes) { // check if we did read all the data
+        movement[0] = read_array[0]; // throttle value
+        movement[1] = read_array[1]; // steering value
+        updateMotors = true;
+    }
 
 }
 
