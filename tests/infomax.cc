@@ -10,18 +10,29 @@ using namespace BoBRobotics::Navigation;
 
 const auto InitialWeights = InfoMax<>::generateInitialWeights(TestImageSize.width * TestImageSize.height, 100, /*seed=*/42);
 
-TEST(InfoMax, SampleImage)
+void testInfoMax(const std::string &filename, ImgProc::Mask mask)
 {
-    const auto filepath = Path::getProgramDirectory() / "navigation" / "infomax.bin";
+    const auto filepath = Path::getProgramDirectory() / "navigation" / filename;
     const auto trueDifferences = readMatrix<float>(filepath);
 
     InfoMaxTest algo{ TestImageSize };
+    algo.setMask(std::move(mask));
     for (const auto &image : TestImages) {
         algo.train(image);
     }
 
     const auto &differences = algo.getImageDifferences(TestImages[0]);
-    compareFloatMatrices(differences, trueDifferences);
+    compareFloatMatrices(differences, trueDifferences, /*precision=*/1e-4f);
+}
+
+TEST(InfoMax, SampleImage)
+{
+    testInfoMax("infomax.bin", {});
+}
+
+TEST(InfoMax, SampleImageMask)
+{
+    testInfoMax("mask_infomax.bin", TestMask);
 }
 
 // Check that the columns have means of approx 0 and SDs of approx 1

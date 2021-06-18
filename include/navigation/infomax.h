@@ -1,6 +1,7 @@
 #pragma once
 
 // BoB robotics includes
+#include "common/circstat.h"
 #include "common/macros.h"
 #include "imgproc/mask.h"
 #include "navigation/insilico_rotater.h"
@@ -65,14 +66,26 @@ public:
     //------------------------------------------------------------------------
     virtual void train(const cv::Mat &image) override
     {
+        getMask().apply(image, m_ScratchImage);
         calculateUY(image);
         trainUY();
     }
 
     virtual float test(const cv::Mat &image) const override
     {
-        const auto decs = m_Weights * getFloatVector(image);
-        return decs.array().abs().sum();
+        return testSum(image, getMask()) / static_cast<float>(0xff * image.rows * image.cols);
+    }
+
+    float test(const cv::Mat &image, const ImgProc::Mask &extraMask) const
+    {
+        static thread_local cv::Mat scratchImage;
+        static thread_local ImgProc::Mask scratchMask;
+
+        extraMask.combine(getMask(), scratchMask);
+        scratchMask.apply(image, scratchImage);
+
+        const auto n = extraMask.countUnmaskedPixels(image.size());
+        return testSum(scratchImage, scratchMask) / static_cast<float>(0xff * n);
     }
 
     //! Generates new random weights
@@ -84,6 +97,15 @@ public:
     //------------------------------------------------------------------------
     // Public API
     //------------------------------------------------------------------------
+    const auto &getDecision(const cv::Mat &image, const ImgProc::Mask &mask) const
+    {
+        static thread_local VectorType scratchVector;
+
+        scratchVector = m_Weights * getFloatVector(image);
+        applyMask(scratchVector, mask);
+        return scratchVector;
+    }
+
     const MatrixType &getWeights() const
     {
         return m_Weights;
@@ -155,7 +177,7 @@ public:
     std::pair<VectorType, VectorType> getUY() const
     {
         // Copy the vectors
-        return std::make_pair<>(m_U, m_Y);
+        return { m_U, m_Y };
     }
 
 private:
@@ -163,11 +185,33 @@ private:
     FloatType m_LearningRate;
     MatrixType m_Weights;
     VectorType m_U, m_Y;
+    cv::Mat m_ScratchImage;
+
+    float testSum(const cv::Mat &image, const ImgProc::Mask &mask) const
+    {
+        return getDecision(image, mask).array().abs().sum();
+    }
+
+    static void applyMask(VectorType &vec, const ImgProc::Mask &mask)
+    {
+        if (mask.empty()) {
+            return;
+        }
+
+        const auto &maskMat = mask.get();
+        const auto maskBegin = maskMat.datastart;
+        for (int i = 0; i < maskMat.rows * maskMat.cols; i++) {
+            if (!maskBegin[i]) {
+                vec(i) = 0;
+            }
+        }
+    }
 
     static auto getFloatVector(const cv::Mat &image)
     {
+        BOB_ASSERT(image.type() == CV_8UC1);
         Eigen::Map<Eigen::Matrix<uint8_t, Eigen::Dynamic, 1>> map(image.data, image.cols * image.rows);
-        return map.cast<FloatType>() / 255.0;
+        return map.cast<FloatType>() / FloatType{ 0xff };
     }
 
     template<class T>
@@ -222,13 +266,7 @@ public:
 
         // Convert this to an angle
         radian_t heading = rotater.columnToHeading(bestIndex);
-        while (heading <= -180_deg) {
-            heading += 360_deg;
-        }
-        while (heading > 180_deg) {
-            heading -= 360_deg;
-        }
-
+        heading = normaliseAngle180(heading);
         return std::make_tuple(heading, *el, std::cref(m_RotatedDifferences));
     }
 
@@ -243,8 +281,8 @@ private:
         m_RotatedDifferences.resize(rotater.numRotations());
 
         // Populate rotated differences with results
-        rotater.rotate([this] (const cv::Mat &image, const ImgProc::Mask &, size_t i) {
-            m_RotatedDifferences[i] = this->test(image);
+        rotater.rotate([this] (const cv::Mat &image, const ImgProc::Mask &mask, size_t i) {
+            m_RotatedDifferences[i] = this->test(image, mask);
         });
     }
 
