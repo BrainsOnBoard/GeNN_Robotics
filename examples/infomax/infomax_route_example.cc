@@ -33,23 +33,30 @@ namespace plt = matplotlibcpp;
 using FloatType = float;
 using InfoMaxType = InfoMaxRotater<FloatType>;
 
-void doTesting(const InfoMaxType &infomax, const std::vector<double> &x,
-               const std::vector<double> &y, const std::vector<cv::Mat> &images)
+void doTesting(const InfoMaxType &infomax, std::vector<double> &x,
+               std::vector<double> &y, const std::vector<cv::Mat> &images)
 {
     using namespace units::math;
+    constexpr size_t skip = 10;
 
     std::vector<double> u, v;
     {
         // Test network
         LOGI << "Testing network...";
         Timer<> t{ "Network testing took: " };
-        for (const auto &image : images) {
+        for (size_t i = 0; i < images.size() / skip; i++) {
             // Get heading and convert to vector
-            const auto heading = std::get<0>(infomax.getHeading(image));
+            const auto heading = std::get<0>(infomax.getHeading(images[i * skip]));
             u.push_back(cos(heading));
             v.push_back(sin(heading));
+            x[i] = x[i * skip];
+            y[i] = y[i * skip];
         }
     }
+
+    // Truncate
+    x.resize(u.size());
+    y.resize(u.size());
 
     // Output as quiver plot
     std::map<std::string, std::string> kwargs;
