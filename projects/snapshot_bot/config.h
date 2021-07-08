@@ -24,12 +24,13 @@ class Config
     using WindowConfig = BoBRobotics::Navigation::PerfectMemoryWindow::DynamicBestMatchGradient::WindowConfig;
 
 public:
-    Config() : m_UseBinaryImage(false), m_UseHorizonVector(false), m_Train(true), m_UseInfoMax(false), m_SaveTestingDiagnostic(false), m_StreamOutput(false), m_ODK2(false),
+    Config() : m_UseBinaryImage(false), m_UseHorizonVector(false), m_Train(true), m_UseInfoMax(false), m_SaveTestingDiagnostic(false), m_StreamOutput(false), m_ReturnToStart(false), m_ODK2(false),
         m_MaxSnapshotRotateDegrees(180.0), m_PMFwdLASize(std::numeric_limits<size_t>::max()), m_PMFwdConfig{0, 0, 0, 0}, m_UnwrapRes(180, 50), m_CroppedRect(0, 0, 180, 50),
         m_WatershedMarkerImageFilename("segmentation.png"), m_JoystickDeadzone(0.25f), m_AutoTrain(false), m_TrainInterval(100.0), m_MotorCommandInterval(500.0), m_MotorTurnCommandInterval(500.0),
         m_ServerListenPort(BoBRobotics::Net::Connection::DefaultListenPort), m_SnapshotServerListenPort(BoBRobotics::Net::Connection::DefaultListenPort + 1),
         m_BestSnapshotServerListenPort(BoBRobotics::Net::Connection::DefaultListenPort + 2), m_MoveSpeed(0.25), m_TurnThresholds{{units::angle::degree_t(5.0), 0.5f}, {units::angle::degree_t(10.0), 1.0f}},
-        m_UseViconTracking(false), m_ViconTrackingPort(0), m_ViconTrackingObjectName("norbot"), m_UseViconCaptureControl(false), m_ViconCaptureControlPort(0)
+        m_UseViconTracking(false), m_ViconTrackingPort(0), m_ViconTrackingObjectName("norbot"), m_UseViconCaptureControl(false), m_ViconCaptureControlPort(0),
+        m_TankPIDKP(0.1f), m_TankPIDKI(0.1f), m_TankPIDKD(0.1f), m_TankPIDDistanceTolerance(0.05f),  m_TankPIDAngleTolerance(3.0f), m_TankPIDStartTurningThreshold(45.0f), m_TankPIDAverageSpeed(0.5f)
     {
     }
 
@@ -42,6 +43,7 @@ public:
     bool shouldUseInfoMax() const{ return m_UseInfoMax; }
     bool shouldSaveTestingDiagnostic() const{ return m_SaveTestingDiagnostic; }
     bool shouldStreamOutput() const{ return m_StreamOutput; }
+    bool shouldReturnToStart() const{ return m_ReturnToStart; }
     bool shouldUseODK2() const{ return m_ODK2; }
 
     units::angle::degree_t getMaxSnapshotRotateAngle() const{ return units::angle::degree_t(m_MaxSnapshotRotateDegrees); }
@@ -50,6 +52,7 @@ public:
     const WindowConfig &getPMFwdConfig() const{ return m_PMFwdConfig; }
 
     const filesystem::path &getOutputPath() const{ return m_OutputPath; }
+    const filesystem::path &getTrainingPath() const{ return m_TrainingPath; }
     const std::string &getTestingSuffix() const{ return m_TestingSuffix; }
 
     const cv::Size &getUnwrapRes() const{ return m_UnwrapRes; }
@@ -74,6 +77,14 @@ public:
     const std::string &getViconCaptureControlHost() const{ return m_ViconCaptureControlHost; }
     int getViconCaptureControlPort() const { return m_ViconCaptureControlPort; }
     const std::string &getViconCaptureControlPath() const{ return m_ViconCaptureControlPath; }
+
+    float getTankPIDKP() const{ return m_TankPIDKP; }
+    float getTankPIDKI() const{ return m_TankPIDKI; }
+    float getTankPIDKD() const{ return m_TankPIDKD; }
+    units::length::meter_t getTankPIDDistanceTolerance() const{ return units::length::meter_t(m_TankPIDDistanceTolerance); }
+    units::angle::degree_t getTankPIDAngleTolerance() const{ return units::angle::degree_t(m_TankPIDAngleTolerance); }
+    units::angle::degree_t getTankPIDStartTurningThreshold() const{ return units::angle::degree_t(m_TankPIDStartTurningThreshold); }
+    float getTankPIDAverageSpeed() const{ return m_TankPIDAverageSpeed; }
 
     int getServerListenPort() const{ return m_ServerListenPort; }
     int getSnapshotServerListenPort() const{ return m_SnapshotServerListenPort; }
@@ -107,8 +118,10 @@ public:
         fs << "shouldUseInfoMax" << shouldUseInfoMax();
         fs << "shouldSaveTestingDiagnostic" << shouldSaveTestingDiagnostic();
         fs << "shouldStreamOutput" << shouldStreamOutput();
+        fs << "shouldReturnToStart" << shouldReturnToStart();
         fs << "shouldUseODK2" << shouldUseODK2();
         fs << "outputPath" << getOutputPath().str();
+        fs << "trainingPath" << getTrainingPath().str();
         fs << "testingSuffix" << getTestingSuffix();
         fs << "maxSnapshotRotateDegrees" << getMaxSnapshotRotateAngle().value();
         fs << "pmFwdLASize" << getIntegerSize(getPMFwdLASize());
@@ -150,6 +163,15 @@ public:
             fs << "path" << getViconCaptureControlPath();
             fs << "}";
         }
+        fs << "tankPID" << "{";
+        fs << "kP" << getTankPIDKP();
+        fs << "kI" << getTankPIDKI();
+        fs << "kD" <<  getTankPIDKD();
+        fs << "distanceTolerance" << getTankPIDDistanceTolerance().value();
+        fs << "angleTolerance" << getTankPIDAngleTolerance().value();
+        fs << "startTurningThreshold" << getTankPIDStartTurningThreshold().value();
+        fs << "averageSpeed" << getTankPIDAverageSpeed();
+        fs << "}";
         fs << "}";
     }
 
@@ -163,6 +185,7 @@ public:
         cv::read(node["shouldUseInfoMax"], m_UseInfoMax, m_UseInfoMax);
         cv::read(node["shouldSaveTestingDiagnostic"], m_SaveTestingDiagnostic, m_SaveTestingDiagnostic);
         cv::read(node["shouldStreamOutput"], m_StreamOutput, m_StreamOutput);
+        cv::read(node["shouldReturnToStart"], m_ReturnToStart, m_ReturnToStart);
         cv::read(node["shouldUseODK2"], m_ODK2, m_ODK2);
 
         // Assert that configuration is valid
@@ -172,6 +195,10 @@ public:
         cv::String outputPath;
         cv::read(node["outputPath"], outputPath, m_OutputPath.str());
         m_OutputPath = (std::string)outputPath;
+
+        cv::String trainingPath;
+        cv::read(node["trainingPath"], trainingPath, m_TrainingPath.str());
+        m_TrainingPath = (std::string)trainingPath;
 
         cv::String testingSuffix;
         cv::read(node["testingSuffix"], testingSuffix, m_TestingSuffix);
@@ -248,6 +275,17 @@ public:
             m_ViconCaptureControlPath = (std::string)viconCaptureControlPath;
         }
 
+        const auto &tankPID = node["tankPID"];
+        if(tankPID.isMap()) {
+            tankPID["kP"] >> m_TankPIDKP;
+            tankPID["kI"] >> m_TankPIDKI;
+            tankPID["kD"] >> m_TankPIDKD;
+            tankPID["distanceTolerance"] >> m_TankPIDDistanceTolerance;
+            tankPID["angleTolerance"] >> m_TankPIDAngleTolerance;
+            tankPID["startTurningThreshold"] >> m_TankPIDStartTurningThreshold;
+            tankPID["averageSpeed"] >> m_TankPIDAverageSpeed;
+        }
+
     }
 
 private:
@@ -299,11 +337,17 @@ private:
     // Should we transmit visual output
     bool m_StreamOutput;
 
+    // Should we automatically drive back to start of route
+    bool m_ReturnToStart;
+
     // Should we use the ODK2 camera
     bool m_ODK2;
 
     // Path to store snapshots etc
     filesystem::path m_OutputPath;
+
+    // Path to load training paths from
+    filesystem::path m_TrainingPath;
 
     // Suffix to add to end of testing images and csvs
     std::string m_TestingSuffix;
@@ -362,6 +406,16 @@ private:
     std::string m_ViconCaptureControlHost;
     int m_ViconCaptureControlPort;
     std::string m_ViconCaptureControlPath;
+
+    // Proportional, Integral and Derivatives for Tank PID
+    float m_TankPIDKP;
+    float m_TankPIDKI;
+    float m_TankPIDKD;
+
+    float m_TankPIDDistanceTolerance;
+    float m_TankPIDAngleTolerance;
+    float m_TankPIDStartTurningThreshold;
+    float m_TankPIDAverageSpeed;
 };
 
 static inline void write(cv::FileStorage &fs, const std::string&, const Config &config)
