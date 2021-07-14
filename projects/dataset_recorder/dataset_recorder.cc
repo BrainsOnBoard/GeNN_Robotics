@@ -38,7 +38,7 @@ bobMain(int argc, char *argv[])
 {
     // setting up
     const char *path_linux = "/dev/ttyACM1"; // path for linux systems
-    Robots::RCCarBot bot;
+    Robots::PassiveRCCarBot bot;
     GPS::Gps gps;
     gps.connect(path_linux);
     BN055 imu;
@@ -135,9 +135,7 @@ bobMain(int argc, char *argv[])
         float botSpeed = NAN;
         degree_t turnAngle = 0_deg;
         try {
-            bot.updateState();
-            botSpeed = bot.getSpeed();
-            turnAngle = bot.getTurningAngle();
+            std::tie(botSpeed, turnAngle) = bot.readRemoteControl();
         } catch (std::exception &e) {
             // if we can't read speed or angle, we just write nan values
             LOGE << "Could not read speed and steering angle from robot : " << e.what();
