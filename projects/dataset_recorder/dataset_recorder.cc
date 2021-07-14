@@ -4,15 +4,16 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <fstream>
 #include <chrono>
 
 // BoB includes
 #include "common/main.h"
 #include "common/stopwatch.h"
 #include "common/background_exception_catcher.h"
+#include "common/gps_reader.h"
 #include "plog/Log.h"
 #include "common/macros.h"
-#include "common/gps.h"
 #include "common/map_coordinate.h"
 #include "common/bn055_imu.h"
 #include "robots/rc_car_bot.h"
@@ -60,10 +61,10 @@ int bobMain(int argc, char* argv[])
 
     // setting up
     const char *path_linux = "/dev/ttyACM1"; // path for linux systems
-    BoBRobotics::Robots::RCCarBot bot;
-    BoBRobotics::GPS::Gps gps;
-    gps.connect(path_linux);
-    BoBRobotics::BN055 imu;
+    Robots::RCCarBot bot;
+    GPS::GPSReader gps{ path_linux };
+    GPS::GPSData data;
+    BN055 imu;
     const int maxTrials = 3;
     int numTrials = maxTrials;
     std::atomic<bool> shouldQuit{false};
@@ -89,11 +90,12 @@ int bobMain(int argc, char* argv[])
     bool found = false;
     while (numTrials > 0 && !found) {
         try {
-            if (gps.getGPSData().gpsQuality != BoBRobotics::GPS::GPSQuality::INVALID) {
+            gps.read(data);
+            if (data.gpsQuality != GPS::GPSQuality::INVALID) {
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(2000));
                 // getting time data to set folder name
-                gps_time =  gps.getGPSData().time;
+                gps_time =  data.time;
                 gps_hour = gps_time.hour;
                 gps_minute = gps_time.minute;
                 gps_second = gps_time.second;
@@ -206,7 +208,7 @@ int bobMain(int argc, char* argv[])
             catcher.check();
 
             // get gps data
-            BoBRobotics::GPS::GPSData data = gps.getGPSData();
+            gps.read(data);
             BoBRobotics::MapCoordinate::GPSCoordinate coord = data.coordinate;
             int gpsQual = (int) data.gpsQuality; // gps quality
 
